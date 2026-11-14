@@ -65,7 +65,8 @@ class Strategy:
         """Optional entry gates from the research bank's winner improvements. Each is off unless its
         parameter is set: adx_min (Wilder ADX14 on tf), min_atr_frac (ATR14/close on tf),
         daily_fast_ema (daily EMA n above/below daily EMA50 in the trade's direction), weekday_only
-        (Monday 00:00 to Friday 16:00 New York, winter offset)."""
+        (Monday 00:00 to Friday 16:00 New York, winter offset), trend_gate_h (EMA50 vs EMA200 on that many
+        hours, 4 or 24, must agree with the trade)."""
         p, m = self.p, self.m
         if p.get("adx_min"):
             f = m.frame(tf)
@@ -85,6 +86,14 @@ class Strategy:
             ef = f.memo(("ema", n), lambda: I.ema(f.c, n))
             es = f.memo(("ema", 50), lambda: I.ema(f.c, 50))
             x, y = m.at(86400, ef, i), m.at(86400, es, i)
+            if x is None or y is None or (x - y) * side <= 0:
+                return False
+        if p.get("trend_gate_h"):
+            g = int(p["trend_gate_h"]) * 3600
+            f = m.frame(g)
+            e50 = f.memo(("ema", 50), lambda: I.ema(f.c, 50))
+            e200 = f.memo(("ema", 200), lambda: I.ema(f.c, 200))
+            x, y = m.at(g, e50, i), m.at(g, e200, i)
             if x is None or y is None or (x - y) * side <= 0:
                 return False
         if p.get("weekday_only"):
@@ -111,7 +120,8 @@ class MTFQuick(Strategy):
                 "adx_min": 0, "weekday_only": 0, "exit_confirm": 1}
     grid = {"st_mult": [2.0, 3.0], "vol_k": [0.0, 1.2], "stop_atr": [1.5, 2.5]}
     # one-change improvements the study may test as "v2" (research bank 2026-11-13); never the defaults
-    improve = {"adx_min": [20, 25, 30], "weekday_only": [1], "exit_confirm": [2, 3], "vol_k": [1.3, 1.5, 1.8]}
+    improve = {"adx_min": [20, 25, 30], "weekday_only": [1], "exit_confirm": [2, 3], "vol_k": [1.3, 1.5, 1.8],
+               "trend_gate_h": [4, 24], "min_atr_frac": [0.003, 0.005], "stop_atr": [2.5, 3.5]}
     tfs = (H1, M30, M15, M5)
 
     def prepare(self):
@@ -261,7 +271,7 @@ class EMAPullback(Strategy):
     grid = {"stop_atr": [1.0, 2.0], "tgt_r": [1.5, 2.5]}
     # one-change improvements the study may test as "v2" (research bank 2026-11-13); never the defaults
     improve = {"adx_min": [20, 25, 30], "min_atr_frac": [0.003, 0.0035, 0.0045], "daily_fast_ema": [15, 20, 25],
-               "tgt_r": [2.5, 3.0, 3.5], "weekday_only": [1]}
+               "tgt_r": [2.5, 3.0, 3.5], "weekday_only": [1], "trend_gate_h": [4, 24]}
     max_bars = 288
 
     def prepare(self):

@@ -292,6 +292,26 @@ def run(state_dir, now=None, log=print, markets_for=None, with_challengers=True)
             for c in cs:
                 out["challengers"].append(dict(c, parent=bk["id"], parent_name=bk["name"], cls=spec["cls"].id,
                                                cadence=cad, parent_test=parent))
+    # the lab: versions grown inside the top strategies, tested over a full year with costs
+    if with_challengers:
+        try:
+            from . import lab as LAB
+            year = {}
+
+            def year_markets(cadence):
+                if markets_for:
+                    return markets_for(cadence)
+                if cadence not in year:
+                    gran = 300 if cadence == "fast" else 3600
+                    since = now - (730 + PA.FAST_WARMUP_DAYS) * DAY if cadence == "fast" else None  # tuning year + holdout year
+                    year[cadence] = PA._markets(gran, now, True, since)[0]
+                return year[cadence]
+            pairs = [(roster[b["id"]], b) for b in books if b["id"] in roster and not b.get("retired")]
+            labs, lab_ch = LAB.run(state_dir, pairs, year_markets, now, log)
+            out["labs"] = labs
+            out["challengers"] += lab_ch
+        except Exception as e:  # the lab never blocks the study
+            log("lab failed: %s" % str(e)[:300])
     os.makedirs(os.path.dirname(path(state_dir)), exist_ok=True)
     with open(path(state_dir) + ".tmp", "w", encoding="utf-8") as f:
         json.dump(out, f, indent=1, default=str)

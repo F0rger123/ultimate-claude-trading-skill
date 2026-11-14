@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-14: lab, realistic costs, account detail
+- `tradedesk/lab.py`: diagnoses the top strategies over a year with costs, grows versions one change at a
+  time, checks each on the year before (holdout) and a shadow run since paper start, and carries winners
+  into the next generation and the weekly shake-up.
+- Costs: perp fee is now 0.06% or $0.15 per contract, whichever is larger; stop exits pay 0.04% slippage.
+- `/api/account`: how each account trades (leverage, shorting, size, cost per trade), plain-English
+  explanation, stats, splits and the lab. New `trend_gate_h` switch for higher-timeframe trend filters.
+
 ## 2026-11-13: strategy bank, first batch
 - `tradedesk/library.py`: 26 researched strategies (daily momentum, 4h breakouts and trails, hourly pullbacks,
   volatility and seasonality rules, 15m/5m breakouts), untested until the desk tests them; they join the

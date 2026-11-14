@@ -34,6 +34,20 @@ Runs once a day from the desk (`python -m tradedesk study`) and again at the sta
 - **Family memory learns from winners too.** A family's score now includes its accounts running now
   (2+ days old), not only the ones that were cut.
 
+## Lab: versions grown inside a strategy (tradedesk/lab.py)
+Runs inside the daily study for the owner's own method and the top 3 accounts by profit.
+- **Diagnosis:** the strategy over the last year with costs (no drawdown block, so the whole year counts):
+  result before costs, fees and slippage paid, longs vs shorts, win rate. Plain lines say why it struggles.
+- **Versions:** one change at a time on top of the current best version (filters such as trend strength
+  ADX, higher-timeframe trend, quiet-market skip, wider stop, exit confirmation, volume), plus a combo of
+  the two best changes. The best 5 are shown on the account's page.
+- **Two-year check:** versions are picked on the last year; each must also beat the running version on the
+  year before (a holdout no version was chosen on) and actually trade there, and keep at least half of the
+  running account's result since paper trading began (a silent shadow run).
+- **Generations:** a version that passes becomes the base for the next generation (`state/paper/labs.json`)
+  and joins the weekly shake-up as a "v2" candidate. Running accounts never change.
+- Growing versions on one year still flatters them: the holdout year is the honest number to quote.
+
 ## Strategy bank (tradedesk/library.py)
 New strategies from outside research go through `research/strategy_bank/README.md`: a written spec with
 exact rules, at most 3 parameters, the mechanism and a source. Claude codes usable specs as Strategy classes

@@ -526,4 +526,48 @@ def account_detail(state_dir, book_id):
         "projection": projection(bk), "backtest": bk.get("backtest"), "screen": spec.get("screen"),
         "recent": account_trades(bk, "closed")[:15], "open_trades": account_trades(bk, "open"),
         "skipped": [{"t": int(e[0]), "sym": e[2], "why": e[3]} for e in bk.get("skips", [])][-5:],
+        "trading": trading_profile(spec, bk),
+        "lab": _lab_view((st.get("labs") or {}).get(book_id), params),
     }
+
+
+def trading_profile(spec, bk):
+    """How the account trades, in plain numbers: leverage, shorting, size per trade, costs per trade."""
+    perp = spec["mode"] == "perp"
+    tr = bk["trades"] + bk["open"]
+    eq0 = bk["start_equity"] or 1.0
+    levs = [x["qty"] * x["entry"] / eq0 for x in tr]
+    days = max((time.time() - bk["start"]) / 86400.0, 1e-9)
+    risk = min(RISK, spec.get("risk", RISK))
+    closed = bk["trades"]
+    return {
+        "leveraged": perp, "can_short": perp,
+        "instrument": "Perpetual-style futures on Coinbase Financial Markets (paper)" if perp else "Spot coins (paper)",
+        "max_leverage_per_coin": min(1.5, spec.get("pos_lev", 1.5)) if perp else 1.0,
+        "max_total_leverage": min(1.5, spec.get("gross_lev", 1.5)) if perp else 1.0,
+        "avg_leverage": round(sum(levs) / len(levs), 2) if levs else None,
+        "max_leverage_used": round(max(levs), 2) if levs else None,
+        "risk_per_trade_pct": risk, "risk_per_trade_usd": round(risk * bk["equity"], 2),
+        "avg_position_usd": round(sum(x["qty"] * x["entry"] for x in tr) / len(tr), 2) if tr else None,
+        "avg_cost_per_trade": round(sum(x["fees"] + x["funding"] for x in closed) / len(closed), 2) if closed else None,
+        "trades_per_day": round(len(tr) / days, 2), "coins": sorted({x["sym"] for x in tr}) or SYMS,
+        "fees_model": ("0.06% exchange fee or $0.15 per contract, whichever is more, each side; 0.02% slippage "
+                       "on market fills, 0.04% on stop exits; funding 0.001%/hour against longs (assumed)") if perp
+                      else "0.9% fee each side, 0.05% slippage",
+    }
+
+
+def _lab_view(lab, params=None):
+    if not lab:
+        return None
+    from .lab import phrase
+    base = lab.get("base_params") or {}
+    built = [phrase(k, v) for k, v in sorted(base.items()) if (params or {}).get(k) != v]
+    def t(m):
+        return {k: m.get(k) for k in ("ret_pct", "max_dd_pct", "trades", "wins", "gross", "fees", "prior_ret_pct",
+                                      "prior_trades", "shadow_pnl", "long_pnl", "short_pnl")}
+    return {"generation": lab["generation"], "parent": t(lab["parent"]), "diagnosis": lab["diagnosis"],
+            "built_on": built,
+            "promoted": lab.get("promoted"),
+            "versions": [{"why": v["why"], "combined": bool(v.get("combined")), "test": t(v["test"])}
+                         for v in lab["versions"]]}

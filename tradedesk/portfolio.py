@@ -27,7 +27,10 @@ import math
 DAY = 86400
 
 SPOT_COSTS = {"taker": 0.009, "maker": 0.005, "slip": 0.0005}   # 2026 US entry-tier scenario (unverified)
-PERP_COSTS = {"taker": 0.0006, "maker": 0.0006, "slip": 0.0002}  # provisional CFM assumption
+# CFM perps: Coinbase advertises fees from 0.02% with a $0.15 minimum per contract (2026, not reconciled with
+# the exchange's filed schedule). We charge 0.06% (3x the headline, conservative) or $0.15 per contract,
+# whichever is larger, plus 0.02% slippage on market fills and 0.04% on stop exits (stops fill into fast moves).
+PERP_COSTS = {"taker": 0.0006, "maker": 0.0006, "slip": 0.0002, "stop_slip": 0.0004, "min_per_contract": 0.15}
 CONTRACTS = {"BTC": 0.01, "ETH": 0.1, "SOL": 5.0}
 
 
@@ -98,11 +101,19 @@ def run(markets, variants, cfg, start_t=None, end_t=None, active=None, log=None,
     def gross_now():
         return sum(p.qty * last_px.get(p.sym, p.entry) for p in pos.values())
 
+    def fee_for(sym, qty, px):
+        f = qty * px * k["taker"]
+        cs = cfg.contracts.get(sym)
+        if cs and k.get("min_per_contract"):
+            f = max(f, round(qty / cs) * k["min_per_contract"])
+        return f
+
     def close(p, px, why, t):
         nonlocal cash
         side = p.side
-        fill = px * (1 - side * k["slip"])
-        fee = p.qty * fill * k["taker"]
+        slip = k.get("stop_slip", k["slip"]) if why in ("stop", "stop_gap", "dd_flatten", "kill_switch") else k["slip"]
+        fill = px * (1 - side * slip)
+        fee = fee_for(p.sym, p.qty, fill)
         if cfg.mode == "spot":
             cash += p.qty * fill - fee
             gross = p.qty * (fill - p.entry)
@@ -169,7 +180,7 @@ def run(markets, variants, cfg, start_t=None, end_t=None, active=None, log=None,
                 if qty * fill < max(cfg.min_notional, 1e-9) or qty <= 0:
                     events.append((t, "skip", s, "size below minimum (contract/notional/cash)"))
                     continue
-                fee = qty * fill * k["taker"]
+                fee = fee_for(s, qty, fill)
                 if cfg.mode == "spot":
                     cash -= qty * fill + fee
                 else:
