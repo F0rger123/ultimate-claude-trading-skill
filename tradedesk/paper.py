@@ -462,3 +462,68 @@ def accounts(state_dir):
                     "spark": spark, "backtest": bk.get("backtest"), "protected": bool(b.get("protected")),
                     "added": b.get("added"), "start": bk.get("start"), "projection": projection(bk)})
     return out
+
+
+def account_detail(state_dir, book_id):
+    """Everything the phone's account screen shows: explanation, settings, stats, breakdowns, study."""
+    from . import explain as EX
+    from . import study as ST
+    spec = next((b for b in roster(state_dir) if b["id"] == book_id), None)
+    bk = load_book(state_dir, book_id)
+    if not spec or not bk:
+        return None
+    cls = spec["cls"]
+    tr = bk["trades"]
+    wins, losses = [x for x in tr if x["pnl"] > 0], [x for x in tr if x["pnl"] <= 0]
+    gw, gl = sum(x["pnl"] for x in wins), -sum(x["pnl"] for x in losses)
+    peak, mdd = bk["start_equity"], 0.0
+    for _, e in bk["curve"]:
+        peak = max(peak, e)
+        mdd = max(mdd, (peak - e) / peak if peak else 0.0)
+
+    def split(key):
+        out = {}
+        for x in tr:
+            k = key(x)
+            d = out.setdefault(k, {"name": k, "trades": 0, "wins": 0, "pnl": 0.0})
+            d["trades"] += 1
+            d["wins"] += x["pnl"] > 0
+            d["pnl"] = round(d["pnl"] + x["pnl"], 2)
+        return sorted(out.values(), key=lambda d: -d["pnl"])
+    params = dict(getattr(cls, "defaults", {}))
+    params.update(spec.get("extra") or {})
+    params.update(latest_params(spec["report"])[0] if spec.get("report") else (spec.get("params") or {}))
+    params = {k: (list(v) if isinstance(v, tuple) else v) for k, v in params.items()
+              if not (k in ("adx_min", "min_atr_frac", "daily_fast_ema", "weekday_only") and not v)
+              and not (k == "exit_confirm" and v == 1)}
+    st = ST.load(state_dir) or {}
+    sa = next((a for a in st.get("accounts", []) if a["id"] == book_id), {})
+    best = max(tr, key=lambda x: x["pnl"]) if tr else None
+    worst = min(tr, key=lambda x: x["pnl"]) if tr else None
+    unreal = sum(o["unrealized"] for o in bk["open"])
+    return {
+        "id": book_id, "name": bk["name"], "strategy": cls.id, "strategy_name": cls.name,
+        "family": getattr(cls, "family", ""), "cadence": spec["cadence"], "mode": spec["mode"],
+        "note": spec.get("note", ""), "protected": bool(spec.get("protected")),
+        "improved_from": spec.get("parent"), "improved_why": spec.get("improved_why"), "skip": spec.get("skip") or [],
+        "added": spec.get("added"), "start": bk["start"], "explain": EX.explain(cls), "settings": params,
+        "risk": {"risk_per_trade": min(RISK, spec.get("risk", RISK)), "max_leverage": min(1.5, spec.get("pos_lev", 1.5))},
+        "stats": {
+            "start_equity": bk["start_equity"], "equity": bk["equity"], "pnl": bk["pnl"],
+            "realized": round(gw - gl, 2), "unrealized": round(unreal, 2), "closed": len(tr), "open": len(bk["open"]),
+            "wins": len(wins), "losses": len(losses), "win_rate": len(wins) / len(tr) if tr else None,
+            "avg_win": gw / len(wins) if wins else None, "avg_loss": -gl / len(losses) if losses else None,
+            "profit_factor": gw / gl if gl > 0 else None, "max_drawdown": mdd,
+            "avg_hold_hours": sum(x["hours"] for x in tr) / len(tr) if tr else None,
+            "fees": round(sum(x["fees"] + x["funding"] for x in tr), 2), "total_R": round(sum(x["R"] for x in tr), 2),
+            "best": best and {"sym": best["sym"], "pnl": best["pnl"], "t1": int(best["t1"])},
+            "worst": worst and {"sym": worst["sym"], "pnl": worst["pnl"], "t1": int(worst["t1"])},
+        },
+        "by_coin": split(lambda x: x["sym"]),
+        "by_side": split(lambda x: "long" if x["side"] == 1 else "short"),
+        "insights": sa.get("insights", []),
+        "groups": [g for g in sa.get("groups", []) if g["n"] >= 2],
+        "projection": projection(bk), "backtest": bk.get("backtest"), "screen": spec.get("screen"),
+        "recent": account_trades(bk, "closed")[:15], "open_trades": account_trades(bk, "open"),
+        "skipped": [{"t": int(e[0]), "sym": e[2], "why": e[3]} for e in bk.get("skips", [])][-5:],
+    }

@@ -106,6 +106,13 @@ class Api:
         step = max(1, len(pts) // 200)
         return {"mode": mode, "range": rng, "points": pts[::step] + (pts[-1:] if pts and len(pts) % step else [])}
 
+    def account(self, q):
+        a = (q.get("account") or [""])[0]
+        d = PAPER.account_detail(self.dir, a)
+        if d is None:
+            raise ValueError("unknown account")
+        return d
+
     def charts(self, q):
         """Every chart in one reply, so the phone can switch account and range without waiting:
         {"all": {"1D": [...], ...}, "<account id>": {...}}, plus the all-accounts projection."""
@@ -202,7 +209,7 @@ def make_handler(api, token):
     routes = {"/api/summary": api.summary, "/api/trades": api.trades, "/api/equity": api.equity,
               "/api/calendar": api.calendar, "/api/strategies": api.strategies, "/api/rules": api.get_rules,
               "/api/accounts": api.accounts, "/api/rotation": api.rotation,
-              "/api/charts": api.charts}
+              "/api/charts": api.charts, "/api/account": api.account}
 
     class H(BaseHTTPRequestHandler):
         def _auth(self):
