@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-15: \$50,000 paper budget, owner's rules on paper, 20 new accounts
+- `paper_total_usd` (default \$50,000) is split evenly across the paper accounts (the \$50 pilot mirror keeps
+  its own \$50). Accounts are still simulated at \$10,000 and shown at their share: every trade and every
+  percentage is unchanged, only dollar amounts scale.
+- Paper accounts follow the owner's `risk_pct` (never above 1%) and `max_trades_per_day` (per account, from
+  2026-11-15 on, so no past trade is removed).
+- 20 new paper accounts picked by a two-year test with costs, grouped into categories (`category` in the
+  roster); the owner's method family grows to 9.
+
 ## 2026-11-14: the owner's method gets a family
 - MTFQuick: `entry_confirm` (agreement must hold k closed bars), `exit_tf` (exit on the 30m or 1h flip),
   `chop_mode` (after 2+ 1h flips in 24h, trade only 4h+1h agreement and exit on 1h). All off by default.

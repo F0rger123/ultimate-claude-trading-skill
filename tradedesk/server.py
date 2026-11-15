@@ -151,10 +151,12 @@ class Api:
             e["trades"] += 1
             e["wins"] += 1 if (t["pnl_usd"] or 0) > 0 else 0
             e["by"][t["strategy"]] = e["by"].get(t["strategy"], 0) + (t["pnl_usd"] or 0)
+        names = PAPER.names(self.dir)
         out = []
         for d in sorted(days):
             e = days[d]
             e["best"] = max(e["by"], key=e["by"].get) if e["by"] else None
+            e["best"] = names.get(e["best"], e["best"])
             e.pop("by")
             out.append(e)
         return {"mode": mode, "month": ym, "first_weekday": calendar.weekday(y, m, 1),

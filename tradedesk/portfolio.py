@@ -37,7 +37,8 @@ CONTRACTS = {"BTC": 0.01, "ETH": 0.1, "SOL": 5.0}
 class Config:
     def __init__(self, mode="spot", equity=10000.0, risk=0.01, pos_lev=1.0, gross_lev=1.0,
                  costs=None, funding_per_h=0.0, contracts=None, min_notional=1.0, dd_policy=False,
-                 dd_warn=0.075, dd_block=0.10, dd_flat=0.15, resume_days=30, cost_mult=1.0):
+                 dd_warn=0.075, dd_block=0.10, dd_flat=0.15, resume_days=30, cost_mult=1.0, max_trades_day=None,
+                 cap_from=None):
         self.mode = mode
         self.equity = equity
         self.risk = risk
@@ -52,6 +53,8 @@ class Config:
         self.dd_policy = dd_policy
         self.dd_warn, self.dd_block, self.dd_flat = dd_warn, dd_block, dd_flat
         self.resume_days = resume_days
+        self.max_trades_day = max_trades_day  # new entries per UTC day for this account (owner's rule)
+        self.cap_from = cap_from  # the cap applies from this time on; earlier trades are never removed
 
 
 class Position:
@@ -129,6 +132,7 @@ def run(markets, variants, cfg, start_t=None, end_t=None, active=None, log=None,
         del pos[p.sym]
 
     killed = False
+    day_count = {}
     for t in clock:
         if kill_at is not None and t >= kill_at and not killed:
             killed = True
@@ -162,6 +166,10 @@ def run(markets, variants, cfg, start_t=None, end_t=None, active=None, log=None,
                 if (side == 1 and stop >= fill) or (side == -1 and stop <= fill):
                     events.append((t, "skip", s, "gap invalidated stop"))
                     continue
+                if (cfg.max_trades_day and (cfg.cap_from is None or t >= cfg.cap_from)
+                        and day_count.get(t // DAY, 0) >= cfg.max_trades_day):
+                    events.append((t, "skip", s, "daily trade cap reached (owner's rule)"))
+                    continue
                 e = equity_now()
                 dd = (hwm - e) / hwm if hwm > 0 else 0
                 risk = cfg.risk * sig.get("size_mult", 1.0)
@@ -185,6 +193,7 @@ def run(markets, variants, cfg, start_t=None, end_t=None, active=None, log=None,
                     cash -= qty * fill + fee
                 else:
                     cash -= fee
+                day_count[t // DAY] = day_count.get(t // DAY, 0) + 1
                 pos[s] = Position(sym=s, side=side, qty=qty, entry=fill, stop=stop, target=sig.get("target"),
                                   t0=t, variant=sig["variant"], risk_usd=qty * abs(fill - stop), fees=fee,
                                   funding=0.0, mae=0.0, size_mult=sig.get("size_mult", 1.0),

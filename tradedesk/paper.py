@@ -150,14 +150,47 @@ def latest_params(report):
     return (dict(w[-1]["params"]) if w else {}), bt
 
 
-def _cfg(book):
+def _cfg(book, rules=None):
+    """rules: the owner's rules.json; paper accounts follow its risk_pct (never above 1%) and
+    max_trades_per_day (per account). Without rules (research tests) the defaults apply."""
+    risk = min(RISK, (rules or {}).get("risk_pct", RISK), book.get("risk", RISK))
+    cap = (rules or {}).get("max_trades_per_day")
+    cap_from = (rules or {}).get("_cap_from")
     if book["mode"] == "spot":
-        return P.Config("spot", equity=book["equity"], risk=RISK, pos_lev=1.0, gross_lev=1.0, dd_policy=True,
-                        resume_days=10 ** 6, min_notional=1.0)
+        return P.Config("spot", equity=book["equity"], risk=risk, pos_lev=1.0, gross_lev=1.0, dd_policy=True,
+                        resume_days=10 ** 6, min_notional=1.0, max_trades_day=cap, cap_from=cap_from)
     # a book may only set smaller risk or leverage than the defaults, never larger
-    return P.Config("perp", equity=book["equity"], risk=min(RISK, book.get("risk", RISK)),
+    return P.Config("perp", equity=book["equity"], risk=risk,
                     pos_lev=min(1.5, book.get("pos_lev", 1.5)), gross_lev=min(1.5, book.get("gross_lev", 1.5)),
-                    dd_policy=True, resume_days=10 ** 6, funding_per_h=FUNDING)
+                    dd_policy=True, resume_days=10 ** 6, funding_per_h=FUNDING, max_trades_day=cap,
+                    cap_from=cap_from)
+
+
+PILOT = "pb_pilot_spot50"  # mirrors the real $50 pilot: keeps its own $50, outside the split
+
+
+def allocation(rules, active):
+    """Dollars each paper account is shown with: the paper budget split evenly (the pilot mirror keeps $50)."""
+    n = len([b for b in active if b["id"] != PILOT]) or 1
+    return float((rules or {}).get("paper_total_usd", 50000.0)) / n
+
+
+def _scale(res, k):
+    """Show a simulated account at its share of the budget. Every trade stays exactly as simulated (same
+    entries, exits and percentages); only the dollar amounts are multiplied by k."""
+    res["sim_equity"], res["scale"] = res["start_equity"], k
+    for key in ("start_equity", "equity", "pnl"):
+        res[key] = res[key] * k
+    res["curve"] = [[t, round(e * k, 2)] for t, e in res["curve"]]
+    for x in res["trades"]:
+        for key in ("qty", "gross", "fees", "funding", "pnl", "risk_usd"):
+            if key in x:
+                x[key] = x[key] * k
+    for x in res["open"]:
+        for key in ("qty", "fees", "funding", "unrealized", "risk_usd"):
+            if key in x:
+                x[key] = x[key] * k
+    return res
 
 
 def _variants(markets, book, params):
@@ -184,6 +217,7 @@ def _state(pdir, now, rules, active):
         if b["id"] not in books:
             seed_slow = st.get("start") and b["id"] in SEED_IDS and b["cadence"] == "slow"
             books[b["id"]] = st["start"] if seed_slow else now - now % (3600 if b["cadence"] == "slow" else 300)
+    st.setdefault("trade_cap_from", now - now % 300)  # owner's daily trade cap applies from here on
     ids = {b["id"] for b in active}
     for k in [k for k in books if k not in ids]:
         books.pop(k)  # retired by the weekly shake-up
@@ -241,6 +275,7 @@ def update(state_dir, journal, rules, log=print, now=None, fetch=True, cadence="
     os.makedirs(pdir, exist_ok=True)
     active = roster(state_dir)
     st = _state(pdir, now, rules, active)
+    rules = dict(rules, _cap_from=st.get("trade_cap_from"))
     books = [b for b in active if b["cadence"] == cadence]
     if not books:
         return rebuild(state_dir, journal, rules, now)
@@ -256,7 +291,7 @@ def update(state_dir, journal, rules, log=print, now=None, fetch=True, cadence="
         else:
             params, bt = dict(book.get("params") or {}), None
         start = st["books"][book["id"]]
-        r = P.run(markets, _variants(markets, book, params), _cfg(book), start_t=start, close_at_end=False,
+        r = P.run(markets, _variants(markets, book, params), _cfg(book, rules), start_t=start, close_at_end=False,
                   kill_at=st.get("kill_at"))
         curve = r["curve"] or [(start, book["equity"])]
         eq = curve[-1][1]
@@ -269,6 +304,8 @@ def update(state_dir, journal, rules, log=print, now=None, fetch=True, cadence="
                "curve": [[t, round(e, 2)] for t, e in curve[::step]] + [[curve[-1][0], round(curve[-1][1], 2)]],
                "trades": r["trades"], "protected": bool(book.get("protected")), "added": book.get("added"),
                "screen": book.get("screen")}
+        if book["id"] != PILOT:
+            _scale(res, allocation(rules, active) / book["equity"])
         results.append(res)
     live = {b["id"] for b in roster(state_dir)}  # the shake-up may have retired a book while this ran
     for res in results:
@@ -443,6 +480,31 @@ def projection(bk, now=None):
     return out
 
 
+CATEGORIES = ["Your method", "Daily trend", "4-hour trend & breakouts", "Hourly", "Short-term (5–15 min)",
+              "Calendar & seasonal", "Rotation & pilot", "Other"]
+
+
+def category(spec):
+    """Group for the phone's account list: the spec's own, or worked out from the strategy."""
+    if spec.get("category"):
+        return spec["category"]
+    if spec.get("family"):
+        return "Your method"
+    cls = spec["cls"]
+    tf = getattr(cls, "tf", None) or (spec.get("params") or {}).get("tf") or getattr(cls, "defaults", {}).get("tf")
+    if spec["mode"] == "spot":
+        return "Rotation & pilot"
+    if getattr(cls, "family", "") == "seasonality":
+        return "Calendar & seasonal"
+    if tf == 86400 or spec["cadence"] == "slow" and tf is None:
+        return "Daily trend"
+    if tf == 14400:
+        return "4-hour trend & breakouts"
+    if tf == 3600:
+        return "Hourly"
+    return "Short-term (5–15 min)" if spec["cadence"] == "fast" else "Other"
+
+
 def accounts(state_dir):
     out = []
     for b in roster(state_dir):
@@ -460,7 +522,8 @@ def accounts(state_dir):
                     "unrealized": sum(o["unrealized"] for o in bk["open"]),
                     "win_rate": len(wins) / len(bk["trades"]) if bk["trades"] else None,
                     "spark": spark, "backtest": bk.get("backtest"), "protected": bool(b.get("protected")),
-                    "added": b.get("added"), "start": bk.get("start"), "projection": projection(bk)})
+                    "added": b.get("added"), "start": bk.get("start"), "projection": projection(bk),
+                    "category": category(b), "family": b.get("family")})
     return out
 
 
@@ -526,9 +589,9 @@ def account_detail(state_dir, book_id):
         "projection": projection(bk), "backtest": bk.get("backtest"), "screen": spec.get("screen"),
         "recent": account_trades(bk, "closed")[:15], "open_trades": account_trades(bk, "open"),
         "skipped": [{"t": int(e[0]), "sym": e[2], "why": e[3]} for e in bk.get("skips", [])][-5:],
-        "trading": trading_profile(spec, bk),
+        "trading": trading_profile(spec, bk), "category": category(spec),
         "family": family_view(state_dir, spec),
-        "lab": _lab_view((st.get("labs") or {}).get(book_id), params),
+        "lab": _lab_view((st.get("labs") or {}).get(book_id), params, bk.get("scale", 1.0)),
     }
 
 
@@ -558,15 +621,19 @@ def trading_profile(spec, bk):
     }
 
 
-def _lab_view(lab, params=None):
+def _lab_view(lab, params=None, scale=1.0):
     if not lab:
         return None
     from .lab import phrase
     base = lab.get("base_params") or {}
     built = [phrase(k, v) for k, v in sorted(base.items()) if (params or {}).get(k) != v]
-    def t(m):
-        return {k: m.get(k) for k in ("ret_pct", "max_dd_pct", "trades", "wins", "gross", "fees", "prior_ret_pct",
-                                      "prior_trades", "shadow_pnl", "long_pnl", "short_pnl")}
+    def t(m):  # dollar figures shown at this account's share of the paper budget
+        out = {k: m.get(k) for k in ("ret_pct", "max_dd_pct", "trades", "wins", "gross", "fees", "prior_ret_pct",
+                                     "prior_trades", "shadow_pnl", "long_pnl", "short_pnl")}
+        for k in ("gross", "fees", "shadow_pnl", "long_pnl", "short_pnl"):
+            if out.get(k) is not None:
+                out[k] = round(out[k] * scale, 2)
+        return out
     return {"generation": lab["generation"], "parent": t(lab["parent"]), "diagnosis": lab["diagnosis"],
             "built_on": built,
             "promoted": lab.get("promoted"),

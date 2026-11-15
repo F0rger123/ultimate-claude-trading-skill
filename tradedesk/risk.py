@@ -21,6 +21,7 @@ DEFAULT_RULES = {
     "news_blackout": [],
     "symbols": ["BTC", "ETH", "SOL"],
     "paper_equity_usd": 10000.0,
+    "paper_total_usd": 50000.0,  # all paper accounts together start with this much, split evenly
     "max_drawdown_pct": 0.15,
     "dd_warn_pct": 0.075,
     "dd_block_pct": 0.10,
@@ -31,7 +32,7 @@ DEFAULT_RULES = {
 EXCHANGE_MAX_LEV = {"BTC": 3.9, "ETH": 3.3, "SOL": 1.8}
 
 FLOORS = {"dd_warn_pct": 0.01, "dd_block_pct": 0.02, "max_drawdown_pct": 0.02, "daily_loss_cap_usd": 1.0, "max_loss_per_trade_usd": 1.0, "max_leverage": 1.0,
-          "max_open_positions": 1, "max_trades_per_day": 1, "risk_pct": 0.0005}
+          "max_open_positions": 1, "max_trades_per_day": 1, "risk_pct": 0.0005, "paper_total_usd": 100.0}
 CEILINGS = {"dd_warn_pct": 0.5, "dd_block_pct": 0.5, "max_drawdown_pct": 0.5, "risk_pct": 0.05, "max_open_positions": 10, "max_trades_per_day": 100, "max_leverage": 20.0}
 
 
