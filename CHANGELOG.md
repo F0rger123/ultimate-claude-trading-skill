@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-14: the owner's method gets a family
+- MTFQuick: `entry_confirm` (agreement must hold k closed bars), `exit_tf` (exit on the 30m or 1h flip),
+  `chop_mode` (after 2+ 1h flips in 24h, trade only 4h+1h agreement and exit on 1h). All off by default.
+- Three sub-strategy paper accounts beside the protected original: chop rules; + 4h trend and 1.8x volume;
+  + a 3.5x ATR stop. Account pages list the family (`family` in the roster, `/api/account`).
+
 ## 2026-11-14: lab, realistic costs, account detail
 - `tradedesk/lab.py`: diagnoses the top strategies over a year with costs, grows versions one change at a
   time, checks each on the year before (holdout) and a shadow run since paper start, and carries winners

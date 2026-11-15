@@ -117,11 +117,18 @@ class MTFQuick(Strategy):
     family = "owner"
     source = "Owner's TradingView method; SuperTrend stands in for the unnamed indicator"
     defaults = {"kind": "supertrend", "st_n": 10, "st_mult": 3.0, "vol_k": 1.0, "stop_atr": 1.5,
-                "adx_min": 0, "weekday_only": 0, "exit_confirm": 1}
+                "adx_min": 0, "weekday_only": 0, "exit_confirm": 1,
+                # owner's chop rules (2026-11-14), all off by default:
+                # entry_confirm k: the four-way agreement must hold for k closed 5m bars (ignores signals that
+                #   appear and vanish); exit_tf: the timeframe whose flip ends the trade (900 = 15m as before,
+                #   1800 = 30m, 3600 = 1h: ride through small counter-signals); chop_mode 1: when the 1h signal
+                #   has flipped chop_flips+ times in the last 24h, trade only when 4h and 1h agree and exit on 1h.
+                "entry_confirm": 1, "exit_tf": 900, "chop_mode": 0, "chop_flips": 2}
     grid = {"st_mult": [2.0, 3.0], "vol_k": [0.0, 1.2], "stop_atr": [1.5, 2.5]}
     # one-change improvements the study may test as "v2" (research bank 2026-11-13); never the defaults
     improve = {"adx_min": [20, 25, 30], "weekday_only": [1], "exit_confirm": [2, 3], "vol_k": [1.3, 1.5, 1.8],
-               "trend_gate_h": [4, 24], "min_atr_frac": [0.003, 0.005], "stop_atr": [2.5, 3.5]}
+               "trend_gate_h": [4, 24], "min_atr_frac": [0.003, 0.005], "stop_atr": [2.5, 3.5],
+               "entry_confirm": [2, 3], "exit_tf": [1800, 3600], "chop_mode": [1]}
     tfs = (H1, M30, M15, M5)
 
     def prepare(self):
@@ -131,9 +138,27 @@ class MTFQuick(Strategy):
             f = m.frame(g)
             self.sig[g] = f.memo(("sig", p["kind"], p["st_n"], p["st_mult"]), lambda f=f: I.signal_line(
                 f.h, f.l, f.c, p["kind"], n=p["st_n"], mult=p["st_mult"]))
+        extra = {int(p.get("exit_tf", M15) or M15)}
+        if p.get("chop_mode"):
+            extra |= {H4, H1}
+        for g in extra - set(self.sig):
+            f = m.frame(g)
+            self.sig[g] = f.memo(("sig", p["kind"], p["st_n"], p["st_mult"]), lambda f=f: I.signal_line(
+                f.h, f.l, f.c, p["kind"], n=p["st_n"], mult=p["st_mult"]))
+        if p.get("chop_mode"):
+            h = self.sig[H1]
+            self.flips = m.frame(H1).memo(("flips24", p["kind"], p["st_n"], p["st_mult"]), lambda: [
+                sum(1 for k in range(max(1, j - 23), j + 1) if h[k] is not None and h[k - 1] is not None and h[k] != h[k - 1])
+                for j in range(len(h))])
         self.vavg = m.b.memo(("sma_v", 20), lambda: I.sma(m.b.v, 20))
         self.a15 = self.atr_tf(M15)
         self.prev_state = {}
+
+    def choppy(self, i):
+        if not self.p.get("chop_mode"):
+            return False
+        j = self.m.maps[H1][i]
+        return j >= 0 and self.flips[j] >= self.p.get("chop_flips", 2)
 
     def state(self, i, tfs=None):
         vals = [self.m.at(g, self.sig[g], i) for g in (tfs or self.tfs)]
@@ -142,10 +167,15 @@ class MTFQuick(Strategy):
         return vals[0] if all(v == vals[0] for v in vals) else 0
 
     def entry(self, i):
-        if i == 0:
+        k = int(self.p.get("entry_confirm", 1) or 1)
+        if i < k:
             return None
-        s, s0 = self.state(i), self.state(i - 1)
-        if s == 0 or s == s0:
+        tfs = (H4, H1) if self.choppy(i) else None
+        s = self.state(i, tfs)
+        if s == 0:
+            return None
+        # new agreement that has held for k closed bars (k = 1: the bar that completes it, as before)
+        if any(self.state(i - q, tfs) != s for q in range(1, k)) or self.state(i - k, tfs) == s:
             return None
         if self.p["vol_k"] > 0 and (not self.vavg[i] or self.m.b.v[i] < self.p["vol_k"] * self.vavg[i]):
             return None
@@ -157,13 +187,17 @@ class MTFQuick(Strategy):
 
     def exit(self, i, pos):
         n = int(self.p.get("exit_confirm", 1) or 1)
+        g = int(self.p.get("exit_tf", M15) or M15)
+        if self.choppy(i):
+            g = max(g, H1)  # in chop, only the 1h (or slower) flip ends the trade
+        sig = self.sig[g]
         if n <= 1:
-            d = self.m.at(M15, self.sig[M15], i)
+            d = self.m.at(g, sig, i)
             return d is not None and d != pos["side"]
-        j = self.m.maps[M15][i]  # exit only after n consecutive closed 15m bars against the position
+        j = self.m.maps[g][i]  # exit only after n consecutive closed bars of g against the position
         if j < n - 1:
             return False
-        return all(self.sig[M15][j - k] is not None and self.sig[M15][j - k] != pos["side"] for k in range(n))
+        return all(sig[j - k] is not None and sig[j - k] != pos["side"] for k in range(n))
 
     def features(self, i):
         f = Strategy.features(self, i)

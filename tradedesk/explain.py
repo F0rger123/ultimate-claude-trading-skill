@@ -22,7 +22,8 @@ EXPLAIN = {
         "why": "When every timeframe agrees, a move is usually backed by real buying or selling, so it tends to keep "
                "going for a while. Most trades lose a little; a few catch a big run.",
         "struggles": "Choppy, sideways markets: the timeframes keep agreeing and disagreeing, so it pays fees on many "
-                     "small losers. Its two-year backtest lost money after costs.",
+                     "small losers. Its two-year backtest lost money after costs. Your sub-strategies test your fix: "
+                     "follow the bigger timeframes in chop and ignore signals that appear and vanish.",
     },
     "ema_pullback": {
         "summary": "Buys dips inside an uptrend (and sells rallies inside a downtrend), with a fixed profit target.",

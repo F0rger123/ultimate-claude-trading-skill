@@ -527,6 +527,7 @@ def account_detail(state_dir, book_id):
         "recent": account_trades(bk, "closed")[:15], "open_trades": account_trades(bk, "open"),
         "skipped": [{"t": int(e[0]), "sym": e[2], "why": e[3]} for e in bk.get("skips", [])][-5:],
         "trading": trading_profile(spec, bk),
+        "family": family_view(state_dir, spec),
         "lab": _lab_view((st.get("labs") or {}).get(book_id), params),
     }
 
@@ -571,3 +572,22 @@ def _lab_view(lab, params=None):
             "promoted": lab.get("promoted"),
             "versions": [{"why": v["why"], "combined": bool(v.get("combined")), "test": t(v["test"])}
                          for v in lab["versions"]]}
+
+
+def family_view(state_dir, spec):
+    """The account's family: the original strategy and its sub-strategies, each a separate paper account."""
+    root = spec.get("family")
+    if not root:
+        return []
+    out = []
+    for b in roster(state_dir):
+        if b.get("family") != root:
+            continue
+        bk = load_book(state_dir, b["id"])
+        sc = b.get("screen") or {}
+        out.append({"id": b["id"], "name": b["name"], "original": b["id"] == root,
+                    "pnl": bk["pnl"] if bk else 0.0, "pnl_pct": (bk["pnl"] / bk["start_equity"]) if bk else 0.0,
+                    "days": round((time.time() - bk["start"]) / 86400.0, 1) if bk else 0.0,
+                    "closed": bk["closed"] if bk else 0, "what": b.get("improved_why") or "Your original rules.",
+                    "backtest_year_pct": sc.get("ret_pct") if b["id"] != root else None})
+    return sorted(out, key=lambda x: (not x["original"], -x["pnl"]))
