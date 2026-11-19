@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-19: sweep of every paper account, losing chop versions removed
+- Backtested all 31 accounts with costs on the last year, the year before and the last 90 days.
+- Removed at the owner's request: the plain chop version (0 of 10 paper trades won, -58% last year), the
+  chop + 4h trend versions without the volume filter (weekdays, ADX 20, wide stop: 0 of 10 paper trades won
+  between them), chop + 4h trend + volume (-3.5% last year, 38% worst drop) and the spot rotation (lost in
+  every window).
+- Lesson: the chop rule only helps on top of the v2 filters (1.8x volume, ADX 20, skip quiet markets, wide
+  stop). Without the volume filter the confirmed entry comes late, after the move, and gets stopped out.
+- Two new sub-strategies of the owner's method: v2 + chop rules (+49% / +15% / +16%) and v2 + 2-bar exit
+  (+57% / +5% / +12%), last year / year before / last 90 days, with fees.
+- Shake-up picks: a fast pick must also make money over the last year, every pick must have made money on
+  its test, and no pick may copy a running account's settings.
+
 ## 2026-11-15: \$50,000 paper budget, owner's rules on paper, 20 new accounts
 - `paper_total_usd` (default \$50,000) is split evenly across the paper accounts (the \$50 pilot mirror keeps
   its own \$50). Accounts are still simulated at \$10,000 and shown at their share: every trade and every

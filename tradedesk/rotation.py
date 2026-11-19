@@ -44,6 +44,9 @@ SIZE = {S.Scalp10.id: {"risk": 0.0025, "pos_lev": 0.1, "gross_lev": 0.1}}  # sma
 CUT = 3
 TRIAL_DAYS = {"fast": 6, "slow": 27}
 SCREEN = {"fast": (21, 5), "slow": (365, 3)}  # test window in days, minimum trades
+# A fast pick must also make money over the last full year with costs. The 21-day test alone once chose
+# 5-minute strategies that lost 51-82% over a year to fees (sweep of 2026-11-19).
+LONG_CHECK_DAYS = 365
 PER_CLASS = 3  # parameter settings tested per strategy family each week
 COOLDOWN_WEEKS = 8
 LEARN_WEIGHT = 1.0  # % of family paper memory added to the test score
@@ -192,6 +195,20 @@ def live_memory(ranks):
     return out
 
 
+def long_check(cls, params, markets, now, skip=None):
+    """One-year test with costs for a fast candidate. Returns the year's return in %, or None."""
+    b = _book(cls, params, "fast")
+    if skip:
+        b["skip"] = skip
+    try:
+        r = P.run(markets, PA._variants(markets, b, params), PA._cfg(b), start_t=now - LONG_CHECK_DAYS * DAY,
+                  close_at_end=True)
+    except Exception:
+        return None
+    c = r["curve"]
+    return round(100.0 * (c[-1][1] - b["equity"]) / b["equity"], 2) if c else None
+
+
 def pick(need, keep, led, now, log=print, markets_for=None, live=None, improved=None):
     """need: {"fast": n, "slow": n}. keep: roster entries that stay. improved: qualified challengers from
     tradedesk/study.py (improved versions of accounts that are winning). Returns (picks, tested)."""
@@ -240,6 +257,24 @@ def pick(need, keep, led, now, log=print, markets_for=None, live=None, improved=
                 c["parent"], c["why"][:40], s["ret_pct"], s["max_dd_pct"], s["trades"], row["total"]))
         tested += rows
         rows.sort(key=lambda r: (not r["screen"]["enough"], -r["total"]))
+        running = {key(b["cls"].id, b.get("params") or {}) for b in keep}
+        long_mk = []
+
+        def ok(r):
+            """A pick must have made money on its test, must not copy a running account, and a fast pick
+            must also have made money over the last year."""
+            if r["screen"]["ret_pct"] <= 0 or key(r["cls"], r["params"]) in running:
+                return False
+            if cadence != "fast":
+                return True
+            if "year_pct" not in r:
+                if not long_mk:
+                    long_mk.append(markets_for("fast_year") if markets_for else PA._markets(
+                        300, now, True, now - (LONG_CHECK_DAYS + PA.FAST_WARMUP_DAYS) * DAY)[0])
+                r["year_pct"] = long_check(PA.REGISTRY[r["cls"]], r["params"], long_mk[0], now, r.get("skip"))
+                log("  year check %-24s %-30s %s" % (r["cls"], json.dumps(r["params"])[:30],
+                                                     "no data" if r["year_pct"] is None else "%+.1f%%" % r["year_pct"]))
+            return r["year_pct"] is not None and r["year_pct"] > 0
         chosen, used = [], set()
         for pass_ in (0, 1):  # first pass: families not running now (improved versions exempt); then anything
             for r in rows:
@@ -247,6 +282,8 @@ def pick(need, keep, led, now, log=print, markets_for=None, live=None, improved=
                     break
                 fam = r.get("parent") or r["cls"]
                 if fam in used or (pass_ == 0 and r["cls"] in active and not r.get("improved")):
+                    continue
+                if not ok(r):
                     continue
                 chosen.append(r)
                 used.add(fam)

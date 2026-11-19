@@ -42,15 +42,33 @@ class RotationTest(unittest.TestCase):
                 json.dump(bk, f)
         self.orig = R.screen
         R.screen = lambda cls, params, cadence, markets, now: {
-            "ret_pct": 2.0 if cls.id == "donchian_4h" else -1.0, "max_dd_pct": 1.0, "trades": 9, "days": 21,
+            "ret_pct": 2.0 if cls.id == "donchian_4h" else 0.5, "max_dd_pct": 1.0, "trades": 9, "days": 21,
             "enough": True, "score": (5.0 if cls.id == "donchian_4h" else 1.0) + len(params) * 0.01}
+        self.orig_year = R.long_check
+        self.year = {}  # cls id -> 1-year % for the fake year check (default +5%)
+        R.long_check = lambda cls, params, markets, now, skip=None: self.year.get(cls.id, 5.0)
 
     def tearDown(self):
         R.screen = self.orig
+        R.long_check = self.orig_year
         shutil.rmtree(self.dir, ignore_errors=True)
 
     def run_once(self, **kw):
         return R.run(self.dir, FakeJournal(), now=self.now, markets_for=lambda c: {}, log=lambda *a: None, **kw)
+
+    def test_fast_pick_needs_a_winning_year(self):
+        # the best recent fast test (donchian_4h) lost over the year: it must not be picked
+        self.year["donchian_4h"] = -40.0
+        e = self.run_once(dry=True)
+        added = [s["cls"] for s in e["added"]]
+        self.assertNotIn("donchian_4h", added)
+        self.assertTrue(added)
+
+    def test_pick_never_copies_a_running_account(self):
+        e = self.run_once(dry=True)
+        running = {R.key(b["cls"].id, b.get("params") or {}) for b in PA.roster(self.dir)}
+        for s in e["added"]:
+            self.assertNotIn(R.key(s["cls"], s["params"]), running)
 
     def test_cuts_bottom_three_eligible_only(self):
         e = self.run_once()

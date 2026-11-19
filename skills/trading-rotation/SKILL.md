@@ -67,6 +67,9 @@ pool. Specs that need data the desk lacks are parked, not faked.
 4. **Find replacements.** Up to 3 settings per strategy family (from each strategy's parameter grid) are
    tested on recent data, run the same way as the paper accounts and with the same costs:
    fast on the last 21 days of 5-minute bars, slow on the last 365 days of hourly bars.
+   A pick must have made money on that test and must not copy a running account's settings. A fast pick
+   must also make money over the last full year with costs: the 21-day test alone once chose 5-minute
+   strategies that lost 51-82% over a year to fees.
    Score = return % − 0.5 × worst drawdown % + family memory. Fewer than 5 trades (fast) or 3 (slow)
    ranks behind everything with enough trades.
 5. **Start three new accounts.** A replacement keeps the speed of the account it replaces. Families
