@@ -200,8 +200,13 @@ def long_check(cls, params, markets, now, skip=None):
     b = _book(cls, params, "fast")
     if skip:
         b["skip"] = skip
+    # No drawdown brake here: with the paper brake on, the first 10% dip froze the test for the rest of the
+    # year, so the "year" result only measured the start (audit of 2026-11-25: it passed a 1h+30m swing that
+    # loses 41% a year and rejected v2 versions that make 50-90%).
+    cfg = PA._cfg(b)
+    cfg.dd_policy = False
     try:
-        r = P.run(markets, PA._variants(markets, b, params), PA._cfg(b), start_t=now - LONG_CHECK_DAYS * DAY,
+        r = P.run(markets, PA._variants(markets, b, params), cfg, start_t=now - LONG_CHECK_DAYS * DAY,
                   close_at_end=True)
     except Exception:
         return None

@@ -142,3 +142,20 @@ class FakeJournalDB:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LongCheckTest(unittest.TestCase):
+    def test_year_check_runs_without_drawdown_brake(self):
+        seen = {}
+        orig_run, orig_var = R.P.run, R.PA._variants
+
+        def fake_run(markets, variants, cfg, **kw):
+            seen["dd"] = cfg.dd_policy
+            return {"curve": [(0, 10000.0), (1, 11000.0)], "trades": []}
+        R.P.run, R.PA._variants = fake_run, lambda markets, b, params: {}
+        try:
+            cls = R.PA.REGISTRY["mtf_quick"]
+            self.assertEqual(R.long_check(cls, {}, {}, 10 ** 9), 10.0)
+        finally:
+            R.P.run, R.PA._variants = orig_run, orig_var
+        self.assertIs(seen["dd"], False)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-25: full audit, equal-start replay, year-check fix
+
+- Every account replayed from the desk's first day (Nov 9) so new accounts are compared fairly with the owner's original. The original is still first over that window (+35% in the replay), but loses 73% and 89% over the last two full years.
+- Fixed the weekly rotation's one-year check: it ran with the paper drawdown brake on, so the first 10% dip froze the test for the rest of the year. It passed a 1h+30m swing that loses 41% a year and rejected v2 versions that make 50-90%. The check now runs without the brake (as the lab already did). New test.
+- Retired the 1h+30m swing (added by the faulty check) and the 1h EMA pullback (long-term loser). Added two chop accounts that only trade strong trends (ADX 30+), which improved all three chop accounts in both test years.
+
 ## 2026-11-19: sweep of every paper account, losing chop versions removed
 - Backtested all 31 accounts with costs on the last year, the year before and the last 90 days.
 - Removed at the owner's request: the plain chop version (0 of 10 paper trades won, -58% last year), the
