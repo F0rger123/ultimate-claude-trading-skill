@@ -150,6 +150,13 @@ def latest_params(report):
     return (dict(w[-1]["params"]) if w else {}), bt
 
 
+# Per-account drawdown brake on paper accounts: off (owner, 2026-11-25). With it on, a paper account that dipped
+# 10% from its high stopped taking trades for good, because nothing ever resumed it (the owner's original froze on
+# Nov 20 and missed every trade after). The owner's drawdown rules still protect the real-money side (desk.py), and
+# the whole paper desk still turns the kill switch on at max_drawdown_pct (rebuild below).
+PAPER_DD_BRAKE = False
+
+
 def _cfg(book, rules=None):
     """rules: the owner's rules.json; paper accounts follow its risk_pct (never above 1%) and
     max_trades_per_day (per account). Without rules (research tests) the defaults apply."""
@@ -157,12 +164,12 @@ def _cfg(book, rules=None):
     cap = (rules or {}).get("max_trades_per_day")
     cap_from = (rules or {}).get("_cap_from")
     if book["mode"] == "spot":
-        return P.Config("spot", equity=book["equity"], risk=risk, pos_lev=1.0, gross_lev=1.0, dd_policy=True,
+        return P.Config("spot", equity=book["equity"], risk=risk, pos_lev=1.0, gross_lev=1.0, dd_policy=PAPER_DD_BRAKE,
                         resume_days=10 ** 6, min_notional=1.0, max_trades_day=cap, cap_from=cap_from)
     # a book may only set smaller risk or leverage than the defaults, never larger
     return P.Config("perp", equity=book["equity"], risk=risk,
                     pos_lev=min(1.5, book.get("pos_lev", 1.5)), gross_lev=min(1.5, book.get("gross_lev", 1.5)),
-                    dd_policy=True, resume_days=10 ** 6, funding_per_h=FUNDING, max_trades_day=cap,
+                    dd_policy=PAPER_DD_BRAKE, resume_days=10 ** 6, funding_per_h=FUNDING, max_trades_day=cap,
                     cap_from=cap_from)
 
 

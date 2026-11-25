@@ -159,3 +159,10 @@ class LongCheckTest(unittest.TestCase):
         finally:
             R.P.run, R.PA._variants = orig_run, orig_var
         self.assertIs(seen["dd"], False)
+
+
+class PaperBrakeTest(unittest.TestCase):
+    def test_paper_accounts_never_freeze_on_drawdown(self):
+        for mode in ("perp", "spot"):
+            cfg = PA._cfg({"mode": mode, "equity": 10000.0}, {"risk_pct": 0.01})
+            self.assertFalse(cfg.dd_policy)

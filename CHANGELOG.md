@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25: paper accounts no longer freeze after a 10% dip
+
+- The per-account drawdown brake on paper accounts is off (owner's request). It froze the owner's original account on Nov 20 for good, because nothing ever resumed it, so it missed every trade after. Paper accounts replay from their start, so the account's result now includes those trades.
+- The owner's drawdown rules (7.5% / 10% / 15%) are unchanged and still guard the real-money side, and the whole paper desk still turns the kill switch on at 15%.
+
 ## 2026-11-25: full audit, equal-start replay, year-check fix
 
 - Every account replayed from the desk's first day (Nov 9) so new accounts are compared fairly with the owner's original. The original is still first over that window (+35% in the replay), but loses 73% and 89% over the last two full years.
