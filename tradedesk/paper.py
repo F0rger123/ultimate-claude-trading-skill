@@ -537,6 +537,17 @@ def accounts(state_dir):
     return out
 
 
+def _longterm(state_dir, book_id):
+    """Full-year results with fees for one account ($10k test, no drawdown brake), written by the audit:
+    {"asof": t, "y1": last year, "y0": the year before, "since_start": since the desk's first day}."""
+    p = os.path.join(state_dir, "paper", "longterm.json")
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f).get(book_id)
+    except (OSError, ValueError):
+        return None
+
+
 def account_detail(state_dir, book_id):
     """Everything the phone's account screen shows: explanation, settings, stats, breakdowns, study."""
     from . import explain as EX
@@ -596,7 +607,7 @@ def account_detail(state_dir, book_id):
         "by_side": split(lambda x: "long" if x["side"] == 1 else "short"),
         "insights": sa.get("insights", []),
         "groups": [g for g in sa.get("groups", []) if g["n"] >= 2],
-        "projection": projection(bk), "backtest": bk.get("backtest"), "screen": spec.get("screen"),
+        "projection": projection(bk), "backtest": bk.get("backtest"), "screen": spec.get("screen"), "longterm": _longterm(state_dir, book_id),
         "recent": account_trades(bk, "closed")[:15], "open_trades": account_trades(bk, "open"),
         "skipped": [{"t": int(e[0]), "sym": e[2], "why": e[3]} for e in bk.get("skips", [])][-5:],
         "trading": trading_profile(spec, bk), "category": category(spec),
