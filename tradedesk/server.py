@@ -207,6 +207,9 @@ class Api:
         return 200, {"kill_switch": on}
 
 
+_SEEN = {}
+
+
 def make_handler(api, token):
     routes = {"/api/summary": api.summary, "/api/trades": api.trades, "/api/equity": api.equity,
               "/api/calendar": api.calendar, "/api/strategies": api.strategies, "/api/rules": api.get_rules,
@@ -217,6 +220,30 @@ def make_handler(api, token):
         def _auth(self):
             got = self.headers.get("Authorization", "")
             return bool(token) and hmac.compare_digest(got.encode(), ("Bearer " + token).encode())
+
+        def _seen(self):
+            """Remember which phone last connected (device and time only; never the token), so the owner can
+            check a new phone is set up. Stored in state/app/clients.json, at most once a minute per device."""
+            try:
+                ua = self.headers.get("User-Agent", "")[:160]
+                who = self.headers.get("Tailscale-User-Login", "")[:80]
+                ip = (self.headers.get("X-Forwarded-For", "") or self.client_address[0]).split(",")[0].strip()[:60]
+                key = ua + "|" + ip
+                now = int(time.time())
+                if now - _SEEN.get(key, 0) < 60:
+                    return
+                _SEEN[key] = now
+                p = os.path.join(api.dir, "app", "clients.json")
+                d = {}
+                if os.path.exists(p):
+                    with open(p, encoding="utf-8") as f:
+                        d = json.load(f)
+                d[key] = {"device": ua, "from": ip, "user": who, "last": now, "first": d.get(key, {}).get("first", now)}
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, "w", encoding="utf-8") as f:
+                    json.dump(d, f, indent=1)
+            except Exception:
+                pass
 
         def _send(self, code, obj):
             b = json.dumps(obj, default=str).encode()
@@ -232,6 +259,7 @@ def make_handler(api, token):
                 return self._send(200, {"ok": True})
             if not self._auth():
                 return self._send(401, {"error": "bad token"})
+            self._seen()
             if u.path == "/app/latest":  # in-app updater: version info published by desk/publish-app.ps1
                 p = os.path.join(api.dir, "app", "latest.json")
                 if not os.path.exists(p):

@@ -26,7 +26,9 @@ import math
 
 DAY = 86400
 
-SPOT_COSTS = {"taker": 0.009, "maker": 0.005, "slip": 0.0005}   # 2026 US entry-tier scenario (unverified)
+# Coinbase Advanced spot, lowest volume tier. Published figures for 2026 disagree (0.60% to 1.20% taker); a $100
+# account always sits in the lowest tier, so we charge the highest: 1.20% taker, 0.60% maker (audit 2026-11-27).
+SPOT_COSTS = {"taker": 0.012, "maker": 0.006, "slip": 0.0005}
 # CFM perps: Coinbase advertises fees from 0.02% with a $0.15 minimum per contract (2026, not reconciled with
 # the exchange's filed schedule). We charge 0.06% (3x the headline, conservative) or $0.15 per contract,
 # whichever is larger, plus 0.02% slippage on market fills and 0.04% on stop exits (stops fill into fast moves).

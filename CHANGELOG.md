@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-27: realistic spot fees, $100 pilot mirror, phone check-in
+
+- Spot fees raised to 1.20% taker / 0.60% maker, the highest published Coinbase Advanced rate for the lowest volume tier (published 2026 figures range from 0.60% to 1.20% taker). Perp fees stay at 0.06% or $0.15 per contract, above every published rate.
+- The pilot mirror is now $100 and runs daily momentum (90 days, 2.5 ATR stop). Its old trend ensemble lost money in both test years at spot fees; this was the only kind of strategy that stayed positive at $100 with these fees. It buys only, so it waits while coins fall.
+- The phone API records which device last connected (device name and time, never the token) in state/app/clients.json.
+
 ## 2026-11-25: paper accounts no longer freeze after a 10% dip
 
 - The per-account drawdown brake on paper accounts is off (owner's request). It froze the owner's original account on Nov 20 for good, because nothing ever resumed it, so it missed every trade after. Paper accounts replay from their start, so the account's result now includes those trades.

@@ -25,6 +25,7 @@ import time
 
 from . import candidates as C
 from . import data as D
+from . import library as LIB
 from . import portfolio as P
 from . import risk as RK
 from . import strategies as S
@@ -46,9 +47,11 @@ BOOKS = [
     {"id": "pb_rotation_spot", "name": "Weekly rotation (spot)", "cls": C.WeeklyStrengthRotation,
      "report": "weekly_strength_rotation-spot", "mode": "spot", "equity": 10000.0, "cadence": "slow",
      "note": "Holds the strongest coin, rebalanced Mondays"},
-    {"id": "pb_pilot_spot50", "name": "$50 spot pilot mirror", "cls": S.TrendEnsemble, "report": "trend_ensemble-spot",
-     "mode": "spot", "equity": 50.0, "extra": {"long_only": 1}, "cadence": "slow", "protected": True,
-     "note": "What the real $50 pilot would do (buys only, spot fees). Never rotated out"},
+    # id kept from the $50 days so its history stays in one file; owner raised it to $100 on 2026-11-27
+    {"id": "pb_pilot_spot50", "name": "$100 spot pilot mirror", "cls": LIB.DailyTSMOMATR,
+     "params": {"momentum_days": 90, "stop_atr": 2.5},
+     "mode": "spot", "equity": 100.0, "cadence": "slow", "protected": True,
+     "note": "What a real $100 pilot would do (buys only, spot fees). Never rotated out"},
     {"id": "pb_fast_mtf", "name": "Fast: 4-timeframe alignment (5m)", "cls": S.MTFQuick, "mode": "perp",
      "equity": 10000.0, "cadence": "fast",
      "note": "Your 1h/30m/15m/5m method. Checked every 5 min, trades about once a day. Lost money after costs in backtests"},
@@ -173,11 +176,11 @@ def _cfg(book, rules=None):
                     cap_from=cap_from)
 
 
-PILOT = "pb_pilot_spot50"  # mirrors the real $50 pilot: keeps its own $50, outside the split
+PILOT = "pb_pilot_spot50"  # mirrors a real $100 pilot: keeps its own $100, outside the split
 
 
 def allocation(rules, active):
-    """Dollars each paper account is shown with: the paper budget split evenly (the pilot mirror keeps $50)."""
+    """Dollars each paper account is shown with: the paper budget split evenly (the pilot mirror keeps $100)."""
     n = len([b for b in active if b["id"] != PILOT]) or 1
     return float((rules or {}).get("paper_total_usd", 50000.0)) / n
 
